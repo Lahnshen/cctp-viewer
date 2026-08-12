@@ -9,7 +9,10 @@
 import { INJECTIVE_RPC, MAX_LOG_RANGE } from './config';
 import { blockNumber, pool, withRetry } from './rpc';
 import { chunks, scanRange } from './scan';
+import { TransferIndex, type AddressMatch, type MatchRole } from './transfer-index';
 import { transferId, type Transfer } from './types';
+
+export type { AddressMatch, MatchRole };
 
 export type IndexFile = {
 	version: 1;
@@ -28,29 +31,18 @@ export type LoadState =
 	| { phase: 'ready' }
 	| { phase: 'error'; message: string };
 
-/** Roles an address can play in a transfer, used to explain why a row matched. */
-export type MatchRole = 'recipient' | 'sender' | 'funder';
-
-export type AddressMatch = { transfer: Transfer; roles: MatchRole[] };
-
-function push<K, V>(map: Map<K, V[]>, key: K, value: V) {
-	const arr = map.get(key);
-	if (arr) arr.push(value);
-	else map.set(key, [value]);
-}
-
 class TransferStore {
 	state = $state<LoadState>({ phase: 'idle' });
 	transfers = $state<Transfer[]>([]);
 	head = $state(0);
 	deployBlock = $state(0);
 	builtAt = $state<string | null>(null);
+	/** False until the first tail completes, i.e. until there is current data to show. */
+	hasSynced = $state(false);
 
 	#anchors: [number, number][] = [];
-	#byInjTx = new Map<string, Transfer[]>();
-	#byNonce = new Map<string, Transfer>();
-	#byAddress = new Map<string, Map<Transfer, Set<MatchRole>>>();
-	#seen = new Set<string>();
+	#fileAnchorCount = 0;
+	#index = new TransferIndex();
 	#loadPromise: Promise<void> | null = null;
 
 	get count() {
@@ -60,6 +52,21 @@ class TransferStore {
 	/** True while anything on screen may be missing the newest transfers. */
 	get syncing() {
 		return this.state.phase === 'loading' || this.state.phase === 'syncing';
+	}
+
+	/**
+	 * True only for the very first sync, when there is nothing current to show.
+	 * A manual refresh keeps the existing rows on screen instead of blanking
+	 * them, since those are already near-current.
+	 */
+	get initialLoading() {
+		return this.syncing && !this.hasSynced;
+	}
+
+	/** Re-scans for transfers added since the last sync. */
+	async refresh() {
+		if (this.syncing) return;
+		await this.#tail();
 	}
 
 	/** 0–1 once the block range is known, or null while it is still being determined. */
@@ -91,25 +98,6 @@ class TransferStore {
 		return Math.round(t1 + ((block - b1) * (t2 - t1)) / (b2 - b1));
 	}
 
-	#index(t: Transfer) {
-		push(this.#byInjTx, t.injTxHash.toLowerCase(), t);
-		this.#seen.add(transferId(t));
-		// Withdrawals have no on-chain nonce; they are found by Injective tx hash.
-		if (t.nonce) this.#byNonce.set(t.nonce.toLowerCase(), t);
-		const add = (addr: string | undefined, role: MatchRole) => {
-			if (!addr) return;
-			const key = addr.toLowerCase();
-			let m = this.#byAddress.get(key);
-			if (!m) this.#byAddress.set(key, (m = new Map()));
-			const roles = m.get(t);
-			if (roles) roles.add(role);
-			else m.set(t, new Set([role]));
-		};
-		add(t.recipient, 'recipient');
-		add(t.sender, 'sender');
-		add(t.funder, 'funder');
-	}
-
 	/**
 	 * Idempotent, and returns the same promise to every caller so anything that
 	 * needs current data — the recent list, a search — can await the tail rather
@@ -127,9 +115,10 @@ class TransferStore {
 			const file = (await res.json()) as IndexFile;
 
 			this.#anchors = file.anchors ?? [];
+			this.#fileAnchorCount = this.#anchors.length;
 			this.deployBlock = file.deployBlock;
 			this.builtAt = file.builtAt;
-			for (const t of file.transfers) this.#index(t);
+			for (const t of file.transfers) this.#index.add(t);
 			this.transfers = file.transfers;
 			this.head = file.head;
 			// The index is on screen now, but it was built at deploy time and the
@@ -151,10 +140,14 @@ class TransferStore {
 		try {
 			current = await blockNumber(INJECTIVE_RPC);
 		} catch {
-			this.state = { phase: 'ready' }; // stale index is still useful
+			// A stale index is still useful; treat it as synced so the UI stops
+			// waiting on a chain we cannot reach.
+			this.hasSynced = true;
+			this.state = { phase: 'ready' };
 			return;
 		}
 		if (current <= this.head) {
+			this.hasSynced = true;
 			this.state = { phase: 'ready' };
 			return;
 		}
@@ -177,15 +170,30 @@ class TransferStore {
 			}
 		);
 
-		const fresh = found.filter((t) => !this.#seen.has(transferId(t)));
-		for (const t of fresh) this.#index(t);
+		// De-duplicate against the index *and* within this batch, so `transfers`
+		// can never carry two rows with the same id even if a range is retried.
+		const fresh: Transfer[] = [];
+		const batch = new Set<string>();
+		for (const t of found) {
+			const id = transferId(t);
+			if (this.#index.has(t) || batch.has(id)) continue;
+			batch.add(id);
+			fresh.push(t);
+		}
+		for (const t of fresh) this.#index.add(t);
 		if (fresh.length) {
 			this.transfers = [...fresh, ...this.transfers].sort(
 				(a, b) => b.injBlock - a.injBlock || b.logIndex - a.logIndex
 			);
 		}
 		this.head = current;
-		this.#anchors = [...this.#anchors, [current, Math.floor(Date.now() / 1000)]];
+		// Keep exactly one live anchor on top of the build-time ones, so repeated
+		// refreshes do not pile up near-identical points and skew interpolation.
+		this.#anchors = [
+			...this.#anchors.slice(0, this.#fileAnchorCount),
+			[current, Math.floor(Date.now() / 1000)]
+		];
+		this.hasSynced = true;
 		this.state = { phase: 'ready' };
 	}
 
@@ -197,28 +205,19 @@ class TransferStore {
 	rememberFunder(t: Transfer, funder: string) {
 		if (t.funder?.toLowerCase() === funder.toLowerCase()) return;
 		t.funder = funder;
-		const key = funder.toLowerCase();
-		let m = this.#byAddress.get(key);
-		if (!m) this.#byAddress.set(key, (m = new Map()));
-		const roles = m.get(t);
-		if (roles) roles.add('funder');
-		else m.set(t, new Set<MatchRole>(['funder']));
+		this.#index.link(funder, 'funder', t);
 	}
 
 	byInjTx(hash: string): Transfer[] {
-		return this.#byInjTx.get(hash.toLowerCase()) ?? [];
+		return this.#index.byInjTx(hash);
 	}
 
 	byNonce(nonce: string): Transfer | undefined {
-		return this.#byNonce.get(nonce.toLowerCase());
+		return this.#index.byNonce(nonce);
 	}
 
 	byAddress(addr: string): AddressMatch[] {
-		const m = this.#byAddress.get(addr.toLowerCase());
-		if (!m) return [];
-		return [...m.entries()]
-			.map(([transfer, roles]) => ({ transfer, roles: [...roles] }))
-			.sort((a, b) => b.transfer.injBlock - a.transfer.injBlock);
+		return this.#index.byAddress(addr);
 	}
 
 	/** Distinct safes/routers seen sending deposits, keyed by source domain. */

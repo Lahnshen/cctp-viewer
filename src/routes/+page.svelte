@@ -12,6 +12,7 @@
 
 	import ExternalLink from '$lib/components/ExternalLink.svelte';
 	import RemoteResult from '$lib/components/RemoteResult.svelte';
+	import RefreshButton from '$lib/components/RefreshButton.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import SyncIndicator from '$lib/components/SyncIndicator.svelte';
 	import TransferDetail from '$lib/components/TransferDetail.svelte';
@@ -125,11 +126,11 @@
 
 	<SearchBar bind:this={searchBar} bind:value={query} {busy} onsubmit={(q) => run(q)} />
 
-	<!-- Index status. Totals are withheld while syncing for the same reason the list is. -->
+	<!-- Index status. Totals are withheld on first load for the same reason the list is. -->
 	<div class="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
 		{#if store.state.phase === 'error'}
 			<span class="text-destructive">Index failed to load: {store.state.message}</span>
-		{:else if store.syncing}
+		{:else if store.initialLoading}
 			<SyncIndicator />
 		{:else}
 			<span>{stats.total.toLocaleString()} transfers indexed</span>
@@ -142,7 +143,12 @@
 				{formatUsdcCompact(stats.outVol)} USDC out
 			</span>
 			<span aria-hidden="true">·</span>
-			<span>through block {store.head.toLocaleString()}</span>
+			{#if store.syncing}
+				<SyncIndicator />
+			{:else}
+				<span>through block {store.head.toLocaleString()}</span>
+			{/if}
+			<RefreshButton class="-my-1 -ml-1" onrefreshed={() => query && run(query, { push: false })} />
 		{/if}
 	</div>
 
@@ -255,7 +261,7 @@
 						<SyncIndicator />
 					</div>
 					<Card.Description>
-						{#if store.syncing}
+						{#if store.initialLoading}
 							<Skeleton class="h-4 w-52" />
 						{:else}
 							{stats.deposits.toLocaleString()} deposits · {stats.withdrawals.toLocaleString()} withdrawals
@@ -269,7 +275,7 @@
 					before the tail finishes would present hours-old transfers as the
 					latest. Hold the list until the newest blocks are in.
 				-->
-				{#if store.syncing}
+				{#if store.initialLoading}
 					<div class="space-y-2 p-3">
 						{#each Array(8) as _, i (i)}
 							<Skeleton class="h-10 w-full" />

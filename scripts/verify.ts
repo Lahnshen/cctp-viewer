@@ -115,5 +115,43 @@ console.log('\n5. bech32 round-trip');
 	check('rejects short hex', hexToInj('0x1234'), null);
 }
 
+
+console.log('\n6. address index tolerates one transfer matching under several roles');
+{
+	// Regression: the address map used to be keyed by object reference. The store
+	// indexes the raw objects from the index file while the UI hands back $state
+	// proxies of those same objects, so one transfer could occupy two slots and
+	// crash the {#each} with a duplicate key.
+	const { TransferIndex } = await import('../src/lib/cctp/transfer-index');
+	const file = JSON.parse(await Bun.file('static/cctp-index.json').text());
+	const transfers = file.transfers as any[];
+
+	const idx = new TransferIndex();
+	for (const t of transfers) idx.add(t);
+	check('every transfer indexed', idx.size, transfers.length);
+
+	let worstDupes = 0;
+	const addresses = new Set<string>();
+	for (const t of transfers) for (const a of [t.recipient, t.sender, t.funder]) if (a) addresses.add(a.toLowerCase());
+	for (const a of addresses) {
+		const ids = idx.byAddress(a).map((m) => `${m.transfer.injTxHash}:${m.transfer.logIndex}`);
+		worstDupes = Math.max(worstDupes, ids.length - new Set(ids).size);
+	}
+	check(`no duplicate ids across ${addresses.size} addresses`, worstDupes, 0);
+
+	// Re-indexing is a no-op, and a proxy of an already-indexed transfer must not
+	// create a second slot.
+	const victim = transfers.find((t) => t.direction === 'deposit' && t.recipient)!;
+	check('re-add is a no-op', idx.add(victim), false);
+	const proxy = new Proxy(victim, {});
+	idx.link(victim.recipient, 'funder', proxy);
+	const ids = idx.byAddress(victim.recipient).map((m) => `${m.transfer.injTxHash}:${m.transfer.logIndex}`);
+	check('proxy under a second role stays one entry', ids.length, new Set(ids).size);
+	const roles = idx.byAddress(victim.recipient).find(
+		(m) => m.transfer.injTxHash === victim.injTxHash && m.transfer.logIndex === victim.logIndex
+	)?.roles;
+	check('…carrying both roles', [...(roles ?? [])].sort().join(','), 'funder,recipient');
+}
+
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} check(s) FAILED.\n`);
 process.exit(failures === 0 ? 0 : 1);

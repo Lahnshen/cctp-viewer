@@ -6,6 +6,8 @@
  * template — the UI renders those values as plain text, which is correct
  * because Iris already hands them back in each chain's native encoding.
  */
+import { hexToInj } from './bech32';
+
 export type Domain = {
 	id: number;
 	name: string;
@@ -61,10 +63,17 @@ export const DOMAINS: Record<number, Domain> = Object.fromEntries(
 		D(26, 'Arc', 'ARC'),
 		D(27, 'Stellar', 'XLM', 'https://stellar.expert/explorer/public', false),
 		D(28, 'EDGE', 'EDGE'),
-		// Injective's CCTP contracts live on its EVM layer, and the EVM tx hash is
-		// not the Cosmos tx hash — injscan indexes Cosmos hashes, so EVM hashes
-		// have to point at Blockscout to resolve.
-		D(29, 'Injective', 'INJ', 'https://blockscout.injective.network'),
+		// injscan is Injective's own explorer and covers both layers: it takes
+		// bech32 accounts, and it resolves an EVM tx hash to its Cosmos hash. The
+		// trailing slash is what its router expects; without it you get a redirect.
+		{
+			id: 29,
+			name: 'Injective',
+			short: 'INJ',
+			evm: true,
+			tx: 'https://injscan.com/transaction/{h}/',
+			address: 'https://injscan.com/account/{h}/'
+		},
 		D(30, 'Morph', 'MORPH'),
 		D(31, 'Pharos', 'PHAROS'),
 		D(32, 'Cronos', 'CRO', 'https://cronoscan.com'),
@@ -88,5 +97,12 @@ export function txUrl(domainId: number, hash: string): string | undefined {
 
 export function addressUrl(domainId: number, addr: string): string | undefined {
 	const t = domain(domainId).address;
-	return t ? t.replace('{h}', addr) : undefined;
+	if (!t) return undefined;
+	// injscan resolves accounts by bech32, not by the 0x form, so normalise here
+	// rather than relying on every caller to have converted first.
+	const value =
+		domainId === INJECTIVE_DOMAIN && /^0x[0-9a-fA-F]{40}$/.test(addr)
+			? (hexToInj(addr) ?? addr)
+			: addr;
+	return t.replace('{h}', value);
 }
