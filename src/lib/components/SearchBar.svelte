@@ -38,12 +38,30 @@
 		input?.focus();
 		input?.select();
 	}
+
+	// The full hint overflows a phone-width field, and an <input> placeholder
+	// cannot be swapped by CSS, so pick it from a media query instead.
+	let narrow = $state(false);
+	$effect(() => {
+		const mq = window.matchMedia('(max-width: 639px)');
+		const sync = () => (narrow = mq.matches);
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
+	const placeholder = $derived(
+		narrow ? 'Address or transaction hash' : 'Search by inj1… or 0x address, or a transaction hash'
+	);
 </script>
 
 <form onsubmit={submit} class="relative">
 	<Search
 		class="text-muted-foreground pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
 	/>
+	<!--
+		pr-32 clears the clear+submit button group (~120px wide). Anything less and
+		a long address runs underneath the buttons.
+	-->
 	<input
 		bind:this={input}
 		bind:value
@@ -51,9 +69,9 @@
 		spellcheck="false"
 		autocapitalize="off"
 		autocomplete="off"
-		placeholder="Search by inj1… or 0x address, or a transaction hash"
+		{placeholder}
 		aria-label="Search CCTP transfers"
-		class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-12 w-full rounded-lg border pr-28 pl-10 text-sm shadow-xs transition-shadow focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none md:text-sm"
+		class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-12 w-full rounded-lg border pr-32 pl-10 text-base shadow-xs transition-shadow focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:text-sm"
 	/>
 	<div class="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
 		{#if value}

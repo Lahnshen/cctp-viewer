@@ -116,10 +116,10 @@
 	/>
 </svelte:head>
 
-<div class="mx-auto min-h-svh w-full max-w-5xl px-4 py-10 sm:px-6 lg:py-14">
-	<header class="mb-8">
-		<h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">Injective CCTP Viewer</h1>
-		<p class="text-muted-foreground mt-1.5 text-sm">
+<div class="mx-auto min-h-svh w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:py-14">
+	<header class="mb-6 sm:mb-8">
+		<h1 class="text-xl font-semibold tracking-tight sm:text-3xl">Injective CCTP Viewer</h1>
+		<p class="text-muted-foreground mt-1.5 text-xs sm:text-sm">
 			Native USDC moving in and out of Injective over Circle's Cross-Chain Transfer Protocol.
 		</p>
 	</header>
@@ -152,7 +152,7 @@
 		{/if}
 	</div>
 
-	<div class="mt-8 space-y-6">
+	<div class="mt-6 space-y-6 sm:mt-8">
 		{#if busy && !outcome}
 			<Skeleton class="h-40 w-full" />
 		{:else if outcome?.kind === 'address'}
@@ -194,7 +194,7 @@
 									onclick={() => toggle(match.transfer)}
 								/>
 								{#if expandedId === transferId(match.transfer)}
-									<div class="bg-muted/30 px-3 pt-1 pb-3">
+									<div class="bg-muted/30 px-1.5 pt-1 pb-3 sm:px-3">
 										<TransferDetail transfer={match.transfer} onsearch={(q) => run(q)} />
 									</div>
 								{/if}
@@ -291,7 +291,7 @@
 									onclick={() => toggle(t)}
 								/>
 								{#if expandedId === transferId(t)}
-									<div class="bg-muted/30 px-3 pt-1 pb-3">
+									<div class="bg-muted/30 px-1.5 pt-1 pb-3 sm:px-3">
 										<TransferDetail transfer={t} onsearch={(q) => run(q)} />
 									</div>
 								{/if}

@@ -82,10 +82,10 @@
 </script>
 
 <Card.Root class="overflow-hidden">
-	<Card.Header class="gap-2">
+	<Card.Header class="gap-2 px-4 sm:px-6">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="flex items-baseline gap-2">
-				<span class="text-2xl font-semibold tabular-nums">{formatUsdc(transfer.amount)}</span>
+				<span class="text-xl font-semibold tabular-nums sm:text-2xl">{formatUsdc(transfer.amount)}</span>
 				<span class="text-muted-foreground text-sm font-medium">USDC</span>
 			</div>
 			<div class="flex items-center gap-1.5">
@@ -116,7 +116,7 @@
 
 	<Separator />
 
-	<Card.Content class="grid gap-x-8 gap-y-4 pt-6 sm:grid-cols-2">
+	<Card.Content class="grid gap-x-8 gap-y-5 px-4 pt-5 sm:gap-y-4 sm:px-6 sm:pt-6 sm:grid-cols-2">
 		<Field label={isDeposit ? 'Sent from' : 'Sent by'} hint={senderIsRouter ? 'Safe / router that called depositForBurn' : undefined}>
 			<AddressLink value={transfer.sender} domain={isDeposit ? transfer.sourceDomain : INJECTIVE_DOMAIN} full />
 			{#if senderIsRouter}
@@ -159,7 +159,7 @@
 						{shorten(attestation.sourceTxHash, 14, 10)}
 					</ExternalLink>
 				{:else}
-					<span class="font-mono text-sm break-all">{attestation.sourceTxHash}</span>
+					<span class="font-mono text-xs break-all sm:text-sm">{attestation.sourceTxHash}</span>
 				{/if}
 			{:else}
 				<span class="text-muted-foreground text-sm">Not reported by Circle</span>
@@ -222,7 +222,7 @@
 
 		<Field label="Nonce">
 			{#if transfer.nonce}
-				<span class="font-mono text-xs break-all">{transfer.nonce}</span>
+				<span class="font-mono text-[0.7rem] break-all sm:text-xs">{transfer.nonce}</span>
 			{:else}
 				<span class="text-muted-foreground text-sm">
 					Assigned by Circle after attestation

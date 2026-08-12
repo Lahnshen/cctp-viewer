@@ -4,9 +4,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	import ChainBadge from './ChainBadge.svelte';
-	import { INJECTIVE_DOMAIN } from '$lib/cctp/domains';
-	import { addressDisplay, formatUsdc, relativeTime, speedLabel } from '$lib/cctp/format';
-	import { shorten } from '$lib/cctp/hex';
+	import { formatUsdc, relativeTime, relativeTimeShort, speedLabel } from '$lib/cctp/format';
 	import { store } from '$lib/cctp/store.svelte';
 	import type { MatchRole } from '$lib/cctp/store.svelte';
 	import type { Transfer } from '$lib/cctp/types';
@@ -23,12 +21,6 @@
 	const isDeposit = $derived(transfer.direction === 'deposit');
 	const counterparty = $derived(isDeposit ? transfer.sourceDomain : transfer.destinationDomain);
 	const time = $derived(store.timeFor(transfer.injBlock));
-	/** Whose address to lead with: the Injective party in either direction. */
-	const injectiveParty = $derived(isDeposit ? transfer.recipient : transfer.sender);
-	const injectiveLabel = $derived(
-		addressDisplay(injectiveParty, INJECTIVE_DOMAIN).primary
-	);
-
 	const ROLE_LABEL: Record<MatchRole, string> = {
 		recipient: 'recipient',
 		sender: 'sender',
@@ -41,7 +33,7 @@
 	{onclick}
 	aria-expanded={expanded}
 	class={cn(
-		'hover:bg-muted/60 flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+		'hover:bg-muted/60 flex w-full min-h-12 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:flex-nowrap',
 		expanded && 'bg-muted/60'
 	)}
 >
@@ -61,34 +53,42 @@
 		{/if}
 	</span>
 
-	<span class="w-28 shrink-0 text-sm font-medium tabular-nums">
+	<span class="shrink-0 text-sm font-medium tabular-nums sm:w-28">
 		{formatUsdc(transfer.amount)}
 	</span>
 
-	<span class="hidden shrink-0 items-center gap-1.5 sm:flex">
+	<!--
+		Chain, direction and role are what make a row legible, so they stay on
+		mobile rather than being hidden. `order-last w-full` drops them onto their
+		own line below the amount; from sm up they sit inline as before.
+	-->
+	<span
+		class="order-last flex w-full min-w-0 flex-wrap items-center gap-1.5 pl-10 sm:order-none sm:w-auto sm:shrink-0 sm:pl-0"
+	>
 		<ChainBadge id={counterparty} />
 		<span class="text-muted-foreground text-xs">{isDeposit ? 'in' : 'out'}</span>
+		{#each roles as role (role)}
+			<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[10px] font-medium">
+				{ROLE_LABEL[role]}
+			</span>
+		{/each}
 	</span>
 
-	{#if roles.length}
-		<span class="hidden shrink-0 gap-1 md:flex">
-			{#each roles as role (role)}
-				<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[10px] font-medium">
-					{ROLE_LABEL[role]}
-				</span>
-			{/each}
+	<span class="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+		<span class="text-muted-foreground hidden w-20 text-right text-xs lg:block">
+			{speedLabel(transfer.finalityThreshold)}
 		</span>
-	{/if}
 
-	<span class="ml-auto text-muted-foreground hidden w-20 shrink-0 text-right text-xs lg:block">
-		{speedLabel(transfer.finalityThreshold)}
+		<span class="text-muted-foreground text-right text-[0.65rem] tabular-nums">
+			<span class="sm:hidden">{relativeTimeShort(time)}</span>
+			<span class="hidden sm:inline">{relativeTime(time)}</span>
+		</span>
+
+		<ChevronDown
+			class={cn(
+				'text-muted-foreground size-4 shrink-0 transition-transform',
+				expanded && 'rotate-180'
+			)}
+		/>
 	</span>
-
-	<span class="text-muted-foreground w-24 shrink-0 text-right text-[0.65rem]">
-		{relativeTime(time)}
-	</span>
-
-	<ChevronDown
-		class={cn('text-muted-foreground size-4 shrink-0 transition-transform', expanded && 'rotate-180')}
-	/>
 </button>

@@ -68,6 +68,18 @@ export function relativeTime(unixSeconds: number | null | undefined): string {
 	return '—';
 }
 
+/** Compact form for narrow screens: `3m`, `2h`, `5d`. */
+export function relativeTimeShort(unixSeconds: number | null | undefined): string {
+	if (!unixSeconds) return '—';
+	const secs = Math.max(0, Math.round(Date.now() / 1000 - unixSeconds));
+	if (secs < 60) return `${secs}s`;
+	if (secs < 3600) return `${Math.round(secs / 60)}m`;
+	if (secs < 86400) return `${Math.round(secs / 3600)}h`;
+	if (secs < 2592000) return `${Math.round(secs / 86400)}d`;
+	if (secs < 31536000) return `${Math.round(secs / 2592000)}mo`;
+	return `${Math.round(secs / 31536000)}y`;
+}
+
 export function absoluteTime(unixSeconds: number | null | undefined): string {
 	if (!unixSeconds) return '—';
 	return new Date(unixSeconds * 1000).toLocaleString(undefined, {
