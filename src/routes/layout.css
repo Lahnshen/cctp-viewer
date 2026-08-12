@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 * {
-    font-family: 'JetBrains Mono Variable';
+    font-family: 'JetBrains Mono Variable', 'monospace';
     text-transform: uppercase;
 }
 
